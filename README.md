@@ -8,3 +8,8 @@ This project assumes a Spherical coordinate system https://en.wikipedia.org/wiki
 
 For image processing X and Y is used. 
 X is Horizontal, Y is vertical.
+
+For snapped images the camera is originally placed in a the sperical coordinate system on the positive x axes. 
+This lead to the following definitions for the axes
+Image X corresponds Spherical Y
+Image Y corresponds Spherical Z
