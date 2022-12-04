@@ -5,6 +5,7 @@ This library is not yet finished. The latest status is available at https://gath
 
 Within the code references to phi and theta are made.
 This project assumes a Spherical coordinate system https://en.wikipedia.org/wiki/Spherical_coordinate_system and the angles match the wikipedia definition.
+Angle phi is positive in a clockwise manner.
 
 For image processing X and Y are used.
 
