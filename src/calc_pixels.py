@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans
 
 from webcam import read_im
-from config import storage, NUM_PIXELS
+from config import storage, NUM_PIXELS, NUM_SNAP_FRAMES
 from model.bit_info import BitInfo
 
 
@@ -77,7 +77,7 @@ class ClusterGroup:
 
 
 class Cluster:
-    def __init__(self, series_name, num_frames: int = 8, num_leds: int = NUM_PIXELS):
+    def __init__(self, series_name, num_frames: int = NUM_SNAP_FRAMES, num_leds: int = NUM_PIXELS):
         Pixel.register = []
         self.series_name = series_name
         self.storage = storage
@@ -260,6 +260,8 @@ class Cluster:
 
 if __name__ == "__main__":
     for folder in storage.iterdir():
+        if folder.stem != 'testing':
+            continue
         print(f"start {folder}")
         start = time.time()
         c = Cluster(folder)

@@ -1,4 +1,4 @@
-from math import cos, sin
+from math import cos, sin, pi
 import numpy as np
 from pandas import concat
 import plotly.express as px
@@ -7,6 +7,7 @@ import plotly.graph_objects as go
 
 from config import storage
 from model.snap import RawSnapData
+from caculations import all_intersection
 from model.triangulation import triangulate
 
 
@@ -35,7 +36,7 @@ def plot_led_3d(led_dict, color, angle):
         y=y,
         z=z,
         mode="markers+text",
-        name="Markers and Text",
+        name=f"{angle}",
         text=text,
         marker=dict(color=color),
         textposition="bottom center"
@@ -51,30 +52,26 @@ if __name__ == "__main__":
              'f270': RawSnapData(storage / 'fiets_270_white_floor')}
 
     angles = triangulate(block['f0'], block['f45'], block['f240'])
+    print(angles[0] / pi)
+    print(angles[1] / pi)
+    print(angles[2] / pi)
+    print(sum(angles) / pi)
 
-    l1 = block['f0'].all_intersection(block['f45'], angles[0])
-    l2 = block['f45'].all_intersection(block['f240'], angles[1])
-    l3 = block['f0'].all_intersection(block['f240'], angles[2])
+    l1 = all_intersection(block['f0'], block['f45'], angles[0])
+    l2 = all_intersection(block['f45'], block['f240'], angles[1])
+    l3 = all_intersection(block['f0'], block['f240'], angles[2])
 
     df = concat([block['f0'].dataframe,
                  block['f45'].dataframe.dot(rotation_matrix(angles[0])),
-                 block['f240'].dataframe.dot(rotation_matrix(angles[1]))
+                 block['f240'].dataframe.dot(rotation_matrix(angles[2]))
                  ])
 
     fig = px.scatter_3d(df, x=0, y=1, z=2)
 
     plot_led_3d(l1, 1, 0)
-    plot_led_3d(l2, 2, 0)
-    plot_led_3d(l3, 3, -angles[0])
+    plot_led_3d(l2, 2, angles[0])
+    plot_led_3d(l3, 3, angles[2])
 
     fig.update_layout(scene={'xaxis_title': 'X', 'yaxis_title': 'Y', 'zaxis_title': 'Z'})
 
     plotly.offline.plot(fig)
-
-
-
-    exit()
-
-
-    excluded = ('fiets_0_white_2', 'fiets_90_white_2', 'fiets_90_white_3', 'fiets_90_white_4')
-

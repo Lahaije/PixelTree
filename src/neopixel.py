@@ -1,4 +1,5 @@
 from typing import List, Union, Optional
+from communication.wifi import Frame, pixelTree
 
 
 class Color:
@@ -8,13 +9,13 @@ class Color:
     Some predefined colors are present to easily test.
     """
     predefined = {
-        'red': (255, 0, 0),
-        'green': (0, 255, 0),
-        'blue': (0, 0, 255),
-        'white': (255, 255, 255),
+        'red': (200, 0, 0),
+        'green': (0, 200, 0),
+        'blue': (0, 0, 200),
+        'white': (150, 150, 150),
         'black': (0, 0, 0),
         'off': (0, 0, 0),
-        'purple': (255, 0, 255)
+        'purple': (200, 0, 200)
     }
 
     def __init__(self, r: int = 0, g: int = 0, b: int = 0):
@@ -82,3 +83,11 @@ class NeoPixels:
     @staticmethod
     def json():
         return{"rgb": [p.json() for p in NeoPixels.pixels]}
+
+    @staticmethod
+    def send_by_wifi():
+        f = Frame()
+        for i in range(len(NeoPixels.pixels)):
+            col = NeoPixels.pixels[i].color
+            f.leds[i] = [col.red, col.green, col.blue]
+        pixelTree.send_frame(f, False)

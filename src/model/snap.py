@@ -1,18 +1,20 @@
 import json
-from math import radians, sin, pi, sqrt, cos, inf
+from math import radians, sin, sqrt
 from statistics import median
 from typing import Dict, Optional, List, Tuple
 
-import numpy as np
-
 from pandas import DataFrame
-from scipy.signal import argrelmax
 
 from config import IMAGE, LENS_ANGLE
 from model.camera import CameraPosition
+from model.positions import pixel_positions
+from model.transformations import rotate_xy, rotate_pixel_dict
 
 
 class SnapLine:
+    """
+    A snap line represents a line from the camera through the neopixel.
+    """
     def __init__(self, x, y, led_id, led_data: 'RawSnapData' = None):
         self.x = x  # x position in snap
         self.y = y  # y position in snap
@@ -21,6 +23,11 @@ class SnapLine:
         self.reliable = True
 
     def distance(self, led: 'SnapLine') -> Optional[float]:
+        """
+        Relative distance between 2 neopixels.
+        :param led: Line to other neopixel
+        :return:
+        """
         try:
             return sqrt((self.x - led.x)**2+(self.y - led.y)**2)
         except AttributeError:
@@ -65,6 +72,11 @@ class SnapLine:
             return dist / counter
         return None
 
+    def camera_distance(self):
+        if not self.id in pixel_positions.latest():
+            raise LookupError(f'No estimated position for led {self.id} available')
+
+
 
 class RawSnapData:
     """
@@ -74,7 +86,7 @@ class RawSnapData:
     RawSnapData will produce data based on the last update of the camera position.
     """
     def __init__(self, data_file):
-        self.snapl: Dict[str, SnapLine] = {}
+        self.snapl: Dict[int, SnapLine] = {}
         self.name = data_file.name
         self._median: Optional[float] = None
         self._tree_center: Optional[int] = None
@@ -83,7 +95,8 @@ class RawSnapData:
         self.load_data(data_file / 'data.txt')
         self.mark_reliable()
 
-        self.camera_pos = CameraPosition(0, -self.camera_distance(), 0, self.name, self.tree_center, IMAGE[1] / 2)
+        self.camera_pos = CameraPosition(self.camera_distance_estimation(), 0, 0,
+                                         self.name, self.tree_center, IMAGE[1] / 2)
 
     def load_data(self, file):
         duplicates = []
@@ -93,7 +106,7 @@ class RawSnapData:
             if led['led'] in self.snapl:
                 duplicates.append(SnapLine(led['x'], led['y'], led['led'], self))
             else:
-                self.snapl[led['led']] = SnapLine(led['x'], led['y'], led['led'], self)
+                self.snapl[int(led['led'])] = SnapLine(led['x'], led['y'], led['led'], self)
 
         for led in duplicates:
             if led.average_neighbour_dist() and \
@@ -111,10 +124,36 @@ class RawSnapData:
                 del self.snapl[key]
 
     @property
+    def image_center_x(self) -> float:
+        """
+        Return the pixel position representing the image center. This pixel represents the origin of the tree.
+        The exact position of the origin will move over time with more Snaps processed
+        :return: pixel position
+        """
+        if hasattr(self, 'camera_pos'):
+            return self.camera_pos.origin[0]
+        return self.tree_center
+
+    @property
+    def image_center_y(self) -> float:
+        """
+            Return the pixel position representing the image center. This pixel represents the origin of the tree.
+            In the Z axis the origin will be half height of the tree.
+            In the inital images, the image center is placed in the middle of the picture
+            The exact position of the origin will move over time with more Snaps processed
+            :return: pixel position
+        """
+        if hasattr(self, 'camera_pos'):
+            return self.camera_pos.origin[1]
+        return IMAGE[1] / 2
+
+    @property
     def tree_center(self) -> int:
         """
         Get the pixel in which the tree center is expected.
         This pixel has the lowest mean error when checking distances to active leds. (most in the middle pixel)
+        This function is only used to estimate the origin in the raw data.
+        As soon as a camera position is available the camera center estimation should be used.
         :return:
         """
         if not self._tree_center:
@@ -134,6 +173,10 @@ class RawSnapData:
 
     @property
     def distances(self) -> List[float]:
+        """
+        List of relative led distances based on the raw image.
+        :return:
+        """
         data = []
         for led in self.snapl.values():
             if led.next():
@@ -148,24 +191,23 @@ class RawSnapData:
 
     @property
     def dataframe(self) -> DataFrame:
-        return DataFrame([[0, -self.camera_distance(), 0]])
+        return DataFrame([[0, -self.camera_distance_estimation(), 0]])
 
-    def angle_y(self, led: SnapLine) -> float:
+    def pixel_phi(self, snap: SnapLine) -> float:
         """
         Return angle between the line from the camera to the center of the tree
-        :param led:
+        :param snap: A snap line in the original image
         :return: angle in radians
         """
-        return radians((led.y - self.tree_center) * LENS_ANGLE[0] / IMAGE[0])
+        return radians((snap.y - self.image_center_x) * LENS_ANGLE[0] / IMAGE[0])
 
-    @staticmethod
-    def angle_x(led: SnapLine) -> float:
+    def pixel_theta(self, snap: SnapLine) -> float:
         """
         Return the angle between de line through the led and the center of the image.
-        :param led:
-        :return:
+        :param snap: A snap line in the original image
+        :return: angle in radians
         """
-        return radians(((IMAGE[1] / 2) - led.y) * LENS_ANGLE[1] / IMAGE[1])
+        return radians((self.image_center_y - snap.x) * LENS_ANGLE[1] / IMAGE[1])
 
     def angle_extremes(self) -> Tuple[Tuple[float, float], Tuple[float, float]]:
         """
@@ -174,13 +216,13 @@ class RawSnapData:
         """
         leds = [led for led in self.snapl.values() if led.reliable]
         if not self._angle_extremes:
-            self._angle_extremes = ((min([self.angle_y(led) for led in leds]),
-                                     min([self.angle_x(led) for led in leds])),
-                                    ((max([self.angle_y(led) for led in leds]),
-                                      max([self.angle_x(led) for led in leds]))))
+            self._angle_extremes = ((min([self.pixel_phi(led) for led in leds]),
+                                     min([self.pixel_theta(led) for led in leds])),
+                                    ((max([self.pixel_phi(led) for led in leds]),
+                                      max([self.pixel_theta(led) for led in leds]))))
         return self._angle_extremes
 
-    def camera_distance(self) -> float:
+    def camera_distance_estimation(self) -> float:
         """
         Get the camera distance in units. One unit is the expected distance between tree center and most outer led."
         :return:
@@ -188,79 +230,39 @@ class RawSnapData:
         angle = max(abs(self.angle_extremes()[0][0]), abs(self.angle_extremes()[1][0]))
         return 1 / sin(angle)
 
-    def angle_fit_data(self, other: 'RawSnapData', num_test_angles=500):
-        result = np.ndarray(shape=(num_test_angles, 2), dtype=float)
-        for i in range(0, num_test_angles):
-            phi = i * 2 * pi / num_test_angles
-            result[i] = (phi, 0)
-
-            for led in self.snapl.values():
-                if led.reliable and led.id in other.snapl and other.snapl[led.id].reliable:
-                    x, y = get_intersection_coord(self, other, phi, led.id)
-
-                    dist = x*x + y*y
-                    if dist < 1:
-                        result[i, 1] += 1
-                    else:
-                        result[i, 1] += 1/dist
-        return result
-
-    def estimate_angle(self, other: 'RawSnapData') -> Tuple[float, float]:
-        data = self.angle_fit_data(other)
-        extremes = argrelmax(data, mode='wrap')
-        best = (0, 0)
-        second = (0, 0)
-        for i in extremes[0]:
-            x, y = data[i]
-            if y > best[1]:
-                second = best
-                best = (x, y)
-            elif y > second[1]:
-                second = (x, y)
-
-        return best[0], second[0]
-
-    def all_intersection(self, other: 'RawSnapData', angle, max_dist=2):
+    def refit_center_pixel(self):
         """
-        Calculate the coördinates of leds visible by 2 camera's with a given angle between the camera's
-        :param other: other LedData camera position
-        :param angle: desired angle between the 2 camera's
-        :param max_dist: only leds with coordinates smaller than max_dist are added in the returned dict
-        :return: Dict. Key is the led id, value is a tuple of x, y, z
+        Use the model of pixels to determine what the origin in the image should be.
+        :return:
         """
-        data = {}
-        for key in self.snapl.keys():
-            if key in other.snapl:
-                x, y = get_intersection_coord(self, other, angle, key)
-                if -max_dist < x < max_dist and -max_dist < y < max_dist:
-                    data[key] = (x, y, 0)
-        return data
+        pixels = rotate_pixel_dict(pixel_positions.latest(), self.camera_pos.phi_estimate)
+        positive = [pixels[p] for p in pixels if pixels[p].y >= 0 and p in self.snapl]
+        negative = [pixels[p] for p in pixels if pixels[p].y <= 0 and p in self.snapl]
+        upper = min(positive, key=lambda p: p.y)
+        lower = max(negative, key=lambda p: p.y)
 
+        a = self.snapl[upper.id]
+        b = self.snapl[lower.id]
+        self.camera_pos.origin = ((a.y + b.y) / 2, self.camera_pos.origin[1])
 
-def get_intersection_coord(cam1: RawSnapData, cam2: RawSnapData, phi, led_id):
-    """
-    Calculate the intersection coordinate of a led between 2 cameras.
-    The returned x, y coordinate is the estimation of where the led is positioned.
-    :param cam1: First camera
-    :param cam2: Seconds camera
-    :param phi: Rotation angle between the camera
-    :param led_id: Led to calculate intersection for.
-    :return:
-    """
-    alfa = cam1.angle_y(cam1.snapl[led_id])
-    beta = cam2.angle_y(cam2.snapl[led_id])
+    def refit_camera(self):
+        self.refit_center_pixel()
 
-    a1 = cos(alfa)
-    b1 = sin(alfa)
-    c1 = - cam1.camera_distance() * sin(alfa)
+        pixels = rotate_pixel_dict(pixel_positions.latest(), self.camera_pos.phi_estimate)
 
-    a2 = cos(beta - phi)
-    b2 = sin(beta - phi)
-    c2 = - cam2.camera_distance() * sin(beta)
+        snap = [snap for snap in self.snapl.values() if snap.reliable]
+        """
+        Find 5 snapped pixels on both sides of the tree with most extreme (biggest) angles.
+        Esta the camera distance based on these leds 
+        """
+        extremes = sorted(snap, key=lambda s: self.pixel_phi(s))
 
-    try:
-        x = ((b1 * c2 - b2 * c1) / (a1 * b2 - a2 * b1))
-        y = ((c1 * a2 - c2 * a1) / (a1 * b2 - a2 * b1))
-        return x, y
-    except ZeroDivisionError:
-        return inf, inf
+        distances = []
+        for snap in extremes[:5] + extremes[-5:]:
+            try:
+                pixel = pixels[snap.id].coord
+                distances.append(pixel[0] + pixel[1] / self.pixel_phi(snap))
+            except LookupError:
+                pass
+
+        self.camera_pos.coord = [median(distances), 0, 0]

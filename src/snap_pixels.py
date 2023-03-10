@@ -5,9 +5,9 @@ import numpy
 from typing import Union
 from cv2 import absdiff
 from neopixel import NeoPixels, Color
-from esp_serial import esp
+# from communication.esp_serial import esp
 from webcam import Webcam, read_im, store_im
-from config import storage, NUM_PIXELS
+from config import storage, NUM_PIXELS, NUM_SNAP_FRAMES
 
 np = NeoPixels(NUM_PIXELS)
 
@@ -25,6 +25,7 @@ class Snapper:
         self.series_name = series_name
         self.snap_color = snap_color
         self.num_pixels = num_pixels
+
         (storage / series_name).mkdir(exist_ok=True, parents=True)
 
     def snap_monochrome(self, name: str, color: Union[Color, str]):
@@ -37,7 +38,8 @@ class Snapper:
         for pixel in NeoPixels.pixels:
             pixel.color = color
 
-        esp.write()
+        # esp.write()
+        NeoPixels.send_by_wifi()
         # Hardcoded sleep for now. This sleep could be replaced by some code calculating
         # and waiting the exact time it takes to render the frame.
         time.sleep(0.2)
@@ -49,7 +51,7 @@ class Snapper:
 
     def snap_full_on(self):
         """Snap a pixture with all leds on"""
-        self.snap_monochrome('all', Color(255, 255, 255))
+        self.snap_monochrome('all', Color(100, 100, 100))
 
     def snap_leds(self):
         """Snap N pixtures. In each pixture all leds turn either on or off, depending on their "foto number".
@@ -58,13 +60,15 @@ class Snapper:
         This pattern is the binary representation of the foto number of the led.
         :return:
         """
-        for n in range(8):
+        for n in range(NUM_SNAP_FRAMES):
             for pixel in NeoPixels.pixels:
                 if pixel.bit_n_set(n):
                     pixel.color = self.snap_color
                 else:
                     pixel.color = 'black'
-            esp.write()
+            # esp.write()
+            NeoPixels.send_by_wifi()
+            NeoPixels.send_by_wifi()
             time.sleep(0.2)
             store_im(f'{self.series_name}/{n}', Webcam.snap())
 
@@ -86,7 +90,7 @@ class Snapper:
         """
         pixel = 0
         id_dict = {}
-        for num in random.sample(range(16, 255), self.num_pixels):
+        for num in random.sample(range(16, 2**NUM_SNAP_FRAMES), self.num_pixels):
             NeoPixels.pixels[pixel].foto_number = num
             id_dict[num] = pixel
             pixel += 1
@@ -106,4 +110,4 @@ class Snapper:
 
 
 if __name__ == "__main__":
-    Snapper('testing').run()
+    Snapper('slaapkamer5').run()
