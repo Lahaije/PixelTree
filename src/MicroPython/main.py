@@ -1,44 +1,18 @@
-from machine import Pin
-import neopixel
-import sys
-import json
+print('main')
+from programs import run
+import uasyncio as asyncio
 
-"""
-This file should be installed on a esp32 running micropython. 
-"""
+from web_page import serve
 
-n = 50  # Number of connected Neopixels
-p = 5  # Pin number connected to Neopixels
+if __name__ == "__main__":
+    loop = asyncio.get_event_loop()
+    loop.create_task(run())
+    loop.create_task(asyncio.start_server(serve, "0.0.0.0", 80))
 
-np = neopixel.NeoPixel(Pin(p), n)
-
-np[0] = (255, 255, 255)
-np[49] = (255, 255, 255)
-np.write()
-
-
-def main():
-    led = Pin(2, Pin.OUT)
-    enabled = False
-    while True:
-        if enabled:
-            led.off()
-        else:
-            led.on()
-        enabled = not enabled
-
-        try:
-            for line in sys.stdin:
-                data = json.loads(line)
-                counter = 0
-                for rgb in data['rgb']:
-                    np[counter] = (rgb['g'], rgb['r'], rgb['b'])
-                    counter += 1
-                np.write()
-                print('done')
-        except Exception as e:
-            print(f"ERROR {e}")
-
-
-if __name__ == '__main__':
-    main()
+    try:
+        loop.run_forever()
+    except KeyboardInterrupt:
+        print("closing")
+        loop.close()
+    except Exception as e:
+        print(e)
