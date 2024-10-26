@@ -5,7 +5,7 @@ from hue import col, RGB
 from pixel import pixels
 from frame import frames
 
-CURR_PROG = 'twinkle'
+CURR_PROG = 'strait'
 SPEED = 350
 
 
@@ -13,7 +13,7 @@ class ProgCol:
     """
     Class to generate colors
     """
-    color_list = ['white_warm', 'black']  # List of Color for the program
+    color_list = ['blue', 'green', 'purple', 'sky_blue', 'yellow']  # List of Color for the program
     color_index = 0
 
     mode = 'next'  # Next or Random

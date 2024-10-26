@@ -7,10 +7,10 @@ from plot import plotly_circle, plotly_led_lines, plotly_intersection, plotly_pi
 from model.positions import pixel_positions, scale_pixels
 
 if __name__ == "__main__":
-    c1 = RawSnapData(storage / 'fiets_0_white')
-    c2 = RawSnapData(storage / 'fiets_45')
+    c1 = RawSnapData(storage / 'front')
+    c2 = RawSnapData(storage / 'corner3')
     # c2 = RawSnapData(storage / 'fiets_90_white')
-    c3 = RawSnapData(storage / 'fiets_240_white')
+    c3 = RawSnapData(storage / 'buur')
     # c3 = RawSnapData(storage / 'fiets_270_white_floor')
 
     """

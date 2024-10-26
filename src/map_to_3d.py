@@ -44,6 +44,7 @@ def plot_led_3d(led_dict, color, angle):
 
 
 if __name__ == "__main__":
+
     block = {'f0': RawSnapData(storage / 'fiets_0_white'),
              'f45': RawSnapData(storage / 'fiets_45'),
              'f90': RawSnapData(storage / 'fiets_90_white'),

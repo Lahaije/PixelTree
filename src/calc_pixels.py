@@ -1,12 +1,12 @@
 import json
 
 import cv2
-import time
+
 from typing import List, Union
 from numpy import zeros, array
 import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans
-
+from numpy import argwhere, average
 from webcam import read_im
 from config import storage, NUM_PIXELS, NUM_SNAP_FRAMES
 from model.bit_info import BitInfo
@@ -39,7 +39,7 @@ class ClusterGroup:
     A ClusterGroup represents a cluster of pixels with similar properties.
     """
     def __init__(self, data: List, series_name):
-        self.data = data
+        self.data = data  # Raw values for each imag.
         self._center = []
         self.bit_info = BitInfo(self.data, series_name)
         self.pixel_id = []
@@ -91,7 +91,11 @@ class Cluster:
         self.num_leds = num_leds
         self.images = self.load_images()
 
+        # Data contains a row for each pixel. Each row contains the raw value of the pixel in each image.
         self.data = zeros((self.X * self.Y, num_frames), dtype=int)
+        # Dataxy, same as data, but x, and y coordinate are prepended.
+        self.dataxy = zeros((self.X * self.Y, num_frames+2), dtype=int)
+
         self.cluster_data: List[ClusterGroup] = []
 
         self.detected_led: List[ClusterGroup] = []  # Array to hold likely locations of leds.
@@ -108,12 +112,12 @@ class Cluster:
         for i in range(self.X):
             for j in range(self.Y):
                 self.data[counter] = [self.images[_][i][j] for _ in range(self.num_frames)]
+                self.dataxy[counter] = [i, j, *self.data[counter]]
                 counter += 1
 
     def calc_kmeans(self):
         data = self.data[[not p.disabled for p in Pixel.register]]
-        print(len(data))
-        km = KMeans(n_clusters=self.num_leds).fit(data)
+        km = KMeans(n_clusters=int(self.num_leds)).fit(data)
         self.cluster_data = [ClusterGroup(row, self.series_name) for row in km.cluster_centers_]
 
         prediction = km.predict(data)
@@ -169,6 +173,12 @@ class Cluster:
             largest.disable_pixels()
             smallest.disable_pixels()
 
+    def temp_filter(self):
+        self.calc_kmeans()
+        for c in self.cluster_data:
+            if c.bit_info.led_key >= 0:
+                self.register_detected(c)
+
     def register_detected(self, cluster: ClusterGroup):
         for c in self.detected_led:
             if c.bit_info.bit_number != cluster.bit_info.bit_number:
@@ -178,6 +188,16 @@ class Cluster:
                 c.add_pixel(cluster.pixel_id)
                 return
         self.detected_led.append(cluster)
+
+    def filter_low_variance(self):
+        """
+        Disable all pixels with a low variance.
+        Low variance pixels are pixels with the same value for all pictures.
+        """
+        variance = self.data.var(axis=1)
+
+        for _ in argwhere(variance < average(variance) ** 2):
+            Pixel.register[_[0]].disable()
 
     def show_plot(self):
         data = zeros((self.X, self.Y))
@@ -231,7 +251,9 @@ class Cluster:
             result.append({'x': row.center[0], 'y': row.center[1],
                            'led': row.bit_info.led_key,
                            'bit': row.bit_info.bit_string,
-                           'random': row.bit_info.bit_number})
+                           'random': row.bit_info.bit_number,
+                           'score': row.bit_info.score})
+            print(row.bit_info.score)
 
         with (storage / self.series_name / 'data.txt') as file:
             file.write_text(json.dumps(result))
@@ -249,7 +271,8 @@ class Cluster:
                 # Workaround for old data files.
                 row = i
             plt.scatter(row['y'], row['x'], s=2, marker='*', edgecolors='blue')
-            plt.text(row['y'], row['x'], row['led'], fontsize=12, color='red')
+            if row['score'] > 50:
+                plt.text(row['y'], row['x'], row['led'], fontsize=6, color='red')
 
         plt.savefig(storage / self.series_name / 'results.png')
 
@@ -259,12 +282,15 @@ class Cluster:
 
 
 if __name__ == "__main__":
-    for folder in storage.iterdir():
-        if folder.stem != 'testing':
-            continue
-        print(f"start {folder}")
-        start = time.time()
-        c = Cluster(folder)
-        c.filter_by_low_score()
-        c.store_results()
-        print(f"done {int(time.time()-start)} seconds")
+    import time
+
+    for folder in storage.glob('*'):
+        if 'backup' not in folder.parts:
+
+            start = time.time()
+            c = Cluster(folder)
+            c.filter_low_variance()
+            c.temp_filter()
+            print(time.time() - start)
+            c.write_data()
+            c.store_results()

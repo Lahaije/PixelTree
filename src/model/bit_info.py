@@ -41,7 +41,8 @@ class BitInfo:
         if not self._score:
             big = [e for e in self.data if e > self.average]
             small = [e for e in self.data if e < self.average]
-            self._score = int(sum((big - mean(big))**2) + sum((small - mean(small))**2))
+            self._score = int(sum((big - mean(big))**2) + sum((small - mean(small))**2)/(mean(big) - mean(small)))
+            # self._score = int(sum((big - mean(big))**2) + sum((small - mean(small))**2))
         return self._score
 
     @property
