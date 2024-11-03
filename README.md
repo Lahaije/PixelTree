@@ -17,3 +17,5 @@ This lead to the following definitions for the axes
 Image X corresponds Spherical Z
 
 Image Y corresponds Spherical Y
+
+![plot](./img/Model.bmp)
