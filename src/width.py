@@ -47,7 +47,7 @@ def estimate_led_radius(snap: DataContainer) -> Generator[Tuple[int, float], Non
         yield led.led_id, dist
 
 
-def estimate_led_width():
+def estimate_led_width(plot_raw_data=False):
     """
     Calculate an estimate of a smoothed distance of all leds to the trunk of the tree.
     For all detected leds the distance to the trunk is added to a dataframe.
@@ -57,7 +57,7 @@ def estimate_led_width():
     df = pd.DataFrame(index=np.arange(NUM_PIXELS), columns=[snap.snap_name.stem for snap in SNAPS])
     for snap in SNAPS:
         for lid, dist in estimate_led_radius(snap):
-            df[snap.snap_name.stem][lid] = dist
+            df.loc[lid, snap.snap_name.stem] = dist
 
     def average_above_median(row):
         """
@@ -75,8 +75,11 @@ def estimate_led_width():
 
     df['above'] = df.apply(average_above_median, axis=1)
 
+    if plot_raw_data:
+        plt.plot(np.linspace(0, 1, 600), df['above'])
+
     series = df['above'].dropna()
-    # plt.plot(series)
+
     z = np.polyfit(HEIGHT[list(series.index)], series, 5)
     p = np.poly1d(z)
 
@@ -98,5 +101,6 @@ if __name__ == "__main__":
     """
     plt.plot(np.linspace(0, 1, 600), HEIGHT, "b--")
     plt.plot(np.linspace(0, 1, 600), WIDTH, "r--")
+    plt.title('Width')
 
     plt.show()

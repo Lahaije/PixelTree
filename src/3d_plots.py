@@ -31,7 +31,7 @@ class Plot:
         if text:
             fig = px.scatter_3d(self.df, x='X', y='Y', z='Z', color="name", text="lid")
         else:
-            fig = px.scatter_3d(self.df, x='X', y='Y', z='Z', color="name")
+            fig = px.scatter_3d(self.df, x='X', y='Y', z='Z', color="name", width=10)
 
         fig.update_layout(
             margin=dict(l=0, r=0, t=0, b=0)
@@ -91,7 +91,7 @@ def plot_model():
         t += theta(i)
         plot.add_point(i, x(WIDTH[i], -t), y(WIDTH[i], -t), HEIGHT[i], 'tree')
 
-    plot.add_reeks([74, 159, 234, 315, 380, 435, 512])
+    # plot.add_reeks([74, 159, 234, 315, 380, 435, 512])
     plot.add_reeks([57, 142, 218, 296, 365, 424, 470, 490, 523, 549, 563, 590])
     plot.show(True)
 

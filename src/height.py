@@ -1,24 +1,17 @@
-from pathlib import Path
 from typing import List
 import statistics
 
 import matplotlib.pyplot as plt
 import numpy as np
+
+from loader import load_all_data_container
 from config import NUM_PIXELS
 from pandas import DataFrame
 
-
 from analyze_data import DataContainer
 
-
-def load_all_data() -> List[DataContainer]:
-    snaps = []
-    for folder in (Path(__file__).parents[1] / 'snap').glob('*'):
-        if folder.stem in ('backup',):
-            continue
-        snaps.append(DataContainer(folder))
-
-    return snaps
+# Optimize the data. This will lead to more accurate led detection, but will take quite some extra calculation time.
+OPTIMIZED = False
 
 
 def count_times_leds_occurs(snaps: List[DataContainer]):
@@ -84,7 +77,7 @@ def estimate_led_height(snaps: List[DataContainer], num_rotatations=2, median_wi
                 except KeyError:
                     pass
             try:
-                median_df['median'][i] = statistics.median(lst)
+                median_df.loc[i, 'median'] = statistics.median(lst)
             except KeyError:
                 pass
         return median_df
@@ -99,7 +92,7 @@ def estimate_led_height(snaps: List[DataContainer], num_rotatations=2, median_wi
     return median_df
 
 
-SNAPS = load_all_data()
+SNAPS = load_all_data_container(OPTIMIZED)
 
 HEIGHT = estimate_led_height(SNAPS)['median']  # Typing hint index = int, value = float
 
@@ -118,7 +111,7 @@ for cont in SNAPS:
 
 
 if __name__ == "__main__":
-    all_snaps = load_all_data()
+    all_snaps = load_all_data_container()
     counts = count_times_leds_occurs(all_snaps)
     sorted = estimate_led_height(all_snaps)
 
@@ -126,5 +119,3 @@ if __name__ == "__main__":
     plt.ylabel('Height')
     plt.xlabel('Led Number')
     plt.show()
-
-    print('')

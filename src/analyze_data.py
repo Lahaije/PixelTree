@@ -2,16 +2,12 @@ import json
 from functools import cached_property
 from math import sqrt
 import numpy as np
-from typing import Dict, Generator, List, Optional, Tuple, Union
+from typing import Dict, Generator, List, Optional, Tuple
 
 from config import storage, NUM_PIXELS
 from cv2plot import DataPlot
 from model.led_info import LedInfo
 
-"""
-This is an copy of analyze data.
-This file will rework how strings are stored.
-"""
 
 def distance(c1: Tuple[int, int], c2: Tuple[int, int]) -> float:
     """
@@ -107,12 +103,11 @@ class DataContainer:
         self.find_strings()
 
     def load_data(self):
-        with (storage / self.snap_name / 'data.txt') as file:
-            for row in json.loads(file.read_text()):
-                try:
-                    self.data[row['led']].add_location(**row)
-                except KeyError:
-                    self.data[row['led']] = LedInfo(**row)
+        for row in json.loads((storage / self.snap_name / 'data.txt').read_text()):
+            try:
+                self.data[row['led']].add_location(**row)
+            except KeyError:
+                self.data[row['led']] = LedInfo(**row)
 
     @property
     def m(self):
@@ -186,6 +181,34 @@ class DataContainer:
     def sort_leds_by_height(self):
         return sorted(self.data.values(), key=lambda led: led.x)
 
+    def distance_to_center(self, led: LedInfo) -> float:
+        """
+        Get the distance from a led to center of the tree
+        line Y = m*x + c
+        distance between point (x, y) and line =
+        (c + m*x -y ) / sqrt(1 + m^2)
+        """
+        return (self.c + self.m*led.x - led.y) / sqrt(1 + self.m**2)
+
+    def center_led_list(self) -> Generator[Tuple[float, int], None, None]:
+        """
+        Create a list of leds expected to be on line mx + c.
+        Since leds will not exactly be in the center, the led_id is linearly interpolated.
+        This list will look like [5.5, 103.12, 155.75, etc)
+
+        Every led is reported as a Tuple. (led id, int)
+        The int represents the led string being wound clockwise or counterclockwise (-1, or 1)
+        """
+        for string in self.led_strings:
+            dist = [self.distance_to_center(led) for led in string.leds]
+            for i in range(len(dist)-1):
+                # Check if one number is positive, and the other negative
+                if bool(max(0, dist[i])) != bool(max(0, dist[i+1])):
+                    led_1 = string.leds[i]
+                    led_2 = string.leds[i+1]
+                    yield (abs(dist[i])/(abs(dist[i]) + dist[i+1]) * (led_2.led_id - led_1.led_id) + led_1.led_id,
+                           -1 if led_1.y > led_2.y else 1)
+
 
 def get_new_plot(snap_name: str, scale: int, holding: DataContainer) -> DataPlot:
     plot = DataPlot(snap_name)
@@ -241,7 +264,7 @@ def get_neighbour_distance(coord: List[Tuple[int, int]]) -> List[float]:
         elif i == len(coord)-1:
             dist.append(distance(coord[i-1], coord[i]))
         else:
-            dist.append((distance(coord[i - 1], coord[i])+ distance(coord[i], coord[i+1]))/2)
+            dist.append((distance(coord[i - 1], coord[i]) + distance(coord[i], coord[i+1]))/2)
     return dist
 
 
@@ -298,65 +321,13 @@ def optimize_led_strings(holding: DataContainer) -> None:
         return optimize_led_strings(holding)
 
 
-def export_led_positions(snap_name:str, data):
+def export_led_positions(snap_name: str, data):
     with (storage / snap_name / 'led_export.json') as file:
         file.write_text(json.dumps(data))
 
 
-def show_data(snap_name: str, scale, store=False):
-    """
-    :param snap_name: Name of the snap folder
-    :param scale: scale
-    :param store: If false, plot shows in window. If True, image is stored in snap folder.
-    :return:
-    """
-    holding = DataContainer(snap_name)
-    holding.calc_led_center_distance()
-
-    plot = get_new_plot(snap_name, scale, holding)
-
-    """
-    for string in holding.led_strings:
-        string.fill_coord()
-        for i in range(len(string.coord) - 1):
-            plot.draw_line(string.coord[i], string.coord[i + 1], 'red')
-    """
-
-    optimize_led_strings(holding)
-
-    for string in holding.led_strings:
-        for i in range(len(string.coord) - 1):
-            plot.draw_line(string.coord[i], string.coord[i + 1], 'yellow')
-
-        # plot.line_mx_c(string['m'], string['c'], 'red')
-
-    plot_leds_colored(plot, holding)
-
-    if store:
-        plot.store('show_data')
-    else:
-        plot.show()
-
-    data = {'m': holding.m, 'c': holding.c}
-    for led in holding.data:
-        data[led] = holding.data[led].coord
-
-    export_led_positions(snap_name, data)
-
-
 if __name__ == "__main__":
-    show_data('Monkey', 2, False)
+    d = DataContainer('Buur')
+    optimize_led_strings(d)
 
-    exit()
-    for folder in storage.glob('*'):
-        if 'backup' not in folder.parts:
-            try:
-                (folder / 'show_data_0.png').unlink()
-                (folder / 'show_data_1.png').unlink()
-            except Exception:
-                pass
-            show_data(folder.name, 5, True)
 
-    for folder in storage.glob('*/analyze_*'):
-        if 'backup' not in folder.parts:
-            show_data(folder.name, 5, True)
